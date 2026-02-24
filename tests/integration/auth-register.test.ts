@@ -1,15 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createClientMock = vi.fn();
-const headersMock = vi.fn();
 const signUpMock = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: createClientMock,
-}));
-
-vi.mock("next/headers", () => ({
-  headers: headersMock,
 }));
 
 const { signUpWithPasswordAction } = await import(
@@ -26,32 +21,25 @@ describe("integration: auth register action", () => {
         signUp: signUpMock,
       },
     });
-    headersMock.mockResolvedValue(
-      new Headers({
-        host: "localhost:3000",
-        "x-forwarded-proto": "http",
-      }),
-    );
-
-    delete process.env.NEXT_PUBLIC_APP_URL;
+    delete process.env.AUTH_LOGIN_EMAIL_DOMAIN;
   });
 
-  it("returns validation error for invalid email", async () => {
+  it("returns validation error for invalid login", async () => {
     const formData = new FormData();
-    formData.set("email", "wrong-email");
+    formData.set("login", "bad login");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 
     const result = await signUpWithPasswordAction({ status: "idle" }, formData);
 
     expect(result.status).toBe("error");
-    expect(result.message).toContain("email");
+    expect(result.message?.toLowerCase()).toContain("логин");
     expect(signUpMock).not.toHaveBeenCalled();
   });
 
   it("returns validation error for short password", async () => {
     const formData = new FormData();
-    formData.set("email", "test@example.com");
+    formData.set("login", "test_user");
     formData.set("password", "short");
     formData.set("confirmPassword", "short");
 
@@ -64,7 +52,7 @@ describe("integration: auth register action", () => {
 
   it("returns validation error for password mismatch", async () => {
     const formData = new FormData();
-    formData.set("email", "test@example.com");
+    formData.set("login", "test_user");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass456");
 
@@ -76,22 +64,24 @@ describe("integration: auth register action", () => {
   });
 
   it("signs up user and returns success state", async () => {
-    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    process.env.AUTH_LOGIN_EMAIL_DOMAIN = "login.local";
     const formData = new FormData();
-    formData.set("email", "new.user@example.com");
+    formData.set("login", "new.user");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 
     const result = await signUpWithPasswordAction({ status: "idle" }, formData);
 
     expect(result.status).toBe("success");
-    expect(result.message).toContain("Проверьте почту");
+    expect(result.message).toContain("по логину");
     expect(signUpMock).toHaveBeenCalledTimes(1);
     expect(signUpMock).toHaveBeenCalledWith({
-      email: "new.user@example.com",
+      email: "new.user@login.local",
       password: "StrongPass123",
       options: {
-        emailRedirectTo: "http://localhost:3000/auth/callback?next=/",
+        data: {
+          login: "new.user",
+        },
       },
     });
   });
@@ -101,7 +91,7 @@ describe("integration: auth register action", () => {
       error: { message: "User already registered" },
     });
     const formData = new FormData();
-    formData.set("email", "exists@example.com");
+    formData.set("login", "existing_user");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 

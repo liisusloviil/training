@@ -14,14 +14,18 @@ import type {
 
 type DraftSetRow = {
   localId: string;
-  planExerciseId: string;
-  setNumber: string;
-  reps: string;
+  setNumber: number;
   weight: string;
+  savedReps?: number;
 };
 
 type ExerciseDraft = {
   exercise: SessionExerciseReadModel;
+  effectiveSetCount: number;
+  repsMin: number;
+  repsMax: number;
+  isRepsFallback: boolean;
+  selectedReps: number;
   rows: DraftSetRow[];
 };
 
@@ -35,26 +39,135 @@ function makeLocalId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function buildInitialRows(exercise: SessionExerciseReadModel): DraftSetRow[] {
-  if (!exercise.sets.length) {
-    return [
-      {
-        localId: makeLocalId(),
-        planExerciseId: exercise.id,
-        setNumber: "1",
-        reps: "",
-        weight: "",
-      },
-    ];
+function toPositiveInt(value: number | null | undefined, fallback: number): number {
+  if (Number.isInteger(value) && Number(value) > 0) {
+    return Number(value);
   }
 
-  return exercise.sets.map((set) => ({
-    localId: makeLocalId(),
-    planExerciseId: exercise.id,
-    setNumber: String(set.setNumber),
-    reps: String(set.reps),
-    weight: String(set.weight),
-  }));
+  return fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function buildRepsOptions(min: number, max: number): number[] {
+  const start = toPositiveInt(min, 1);
+  const end = Math.max(start, toPositiveInt(max, start));
+
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+}
+
+function buildEditableDraft(exercise: SessionExerciseReadModel): ExerciseDraft {
+  const effectiveSetCount = toPositiveInt(exercise.effectiveSetCount, 1);
+  const repsMin = toPositiveInt(exercise.effectiveRepsMin, 1);
+  const repsMax = Math.max(repsMin, toPositiveInt(exercise.effectiveRepsMax, repsMin));
+
+  const setsByNumber = new Map(
+    exercise.sets
+      .filter((set) => set.setNumber >= 1 && set.setNumber <= effectiveSetCount)
+      .map((set) => [set.setNumber, set]),
+  );
+
+  const firstSetReps = exercise.sets.find((set) => Number.isInteger(set.reps))?.reps;
+  const selectedReps = clamp(
+    Number.isInteger(firstSetReps) ? Number(firstSetReps) : repsMin,
+    repsMin,
+    repsMax,
+  );
+
+  const rows: DraftSetRow[] = Array.from({ length: effectiveSetCount }, (_, index) => {
+    const setNumber = index + 1;
+    const existing = setsByNumber.get(setNumber);
+
+    return {
+      localId: makeLocalId(),
+      setNumber,
+      weight: existing ? String(existing.weight) : "",
+    };
+  });
+
+  return {
+    exercise,
+    effectiveSetCount,
+    repsMin,
+    repsMax,
+    isRepsFallback: exercise.isRepsFallback,
+    selectedReps,
+    rows,
+  };
+}
+
+function buildReadOnlyDraft(exercise: SessionExerciseReadModel): ExerciseDraft {
+  const rows: DraftSetRow[] = [...exercise.sets]
+    .sort((a, b) => a.setNumber - b.setNumber)
+    .map((set) => ({
+      localId: makeLocalId(),
+      setNumber: set.setNumber,
+      weight: String(set.weight),
+      savedReps: set.reps,
+    }));
+
+  const firstReps = rows[0]?.savedReps;
+  const safeReps = Number.isInteger(firstReps) ? Number(firstReps) : 1;
+
+  return {
+    exercise,
+    effectiveSetCount: Math.max(rows.length, 1),
+    repsMin: safeReps,
+    repsMax: safeReps,
+    isRepsFallback: false,
+    selectedReps: safeReps,
+    rows,
+  };
+}
+
+function RepsControl(props: {
+  draft: ExerciseDraft;
+  exerciseIndex: number;
+  isReadOnly: boolean;
+  onChange: (value: number) => void;
+}) {
+  const { draft, exerciseIndex, isReadOnly, onChange } = props;
+  const controlLabel = `Повторы для упражнения ${exerciseIndex + 1}: ${draft.exercise.exerciseName}`;
+
+  if (isReadOnly) {
+    return null;
+  }
+
+  if (draft.repsMin === draft.repsMax) {
+    return (
+      <div className="workout-reps-static">
+        {controlLabel}: <strong>{draft.repsMin}</strong>{" "}
+        <small>{draft.isRepsFallback ? "(по умолчанию)" : "(фиксировано планом)"}</small>
+      </div>
+    );
+  }
+
+  const repsOptions = buildRepsOptions(draft.repsMin, draft.repsMax);
+
+  return (
+    <div className="workout-reps-control">
+      <div className="workout-reps-control-head">
+        <span>{controlLabel}</span>
+        <strong>{draft.selectedReps}</strong>
+      </div>
+      <select
+        aria-label={controlLabel}
+        onChange={(event) => onChange(Number(event.target.value))}
+        value={String(draft.selectedReps)}
+      >
+        {repsOptions.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+      <small>
+        Диапазон: {draft.repsMin}-{draft.repsMax}
+      </small>
+    </div>
+  );
 }
 
 export function SessionSetsForm({
@@ -65,14 +178,13 @@ export function SessionSetsForm({
   const initialSessionSetsState: SessionSetsActionState = { status: "idle" };
   const initialCompleteSessionState: CompleteSessionActionState = { status: "idle" };
 
-  const [drafts, setDrafts] = useState<ExerciseDraft[]>(() =>
-    exercises.map((exercise) => ({
-      exercise,
-      rows: buildInitialRows(exercise),
-    })),
-  );
-
   const isReadOnly = status === "completed";
+
+  const [drafts, setDrafts] = useState<ExerciseDraft[]>(() =>
+    exercises.map((exercise) =>
+      isReadOnly ? buildReadOnlyDraft(exercise) : buildEditableDraft(exercise),
+    ),
+  );
 
   const [saveState, saveAction, isSaving] = useActionState(
     upsertSessionSetsAction,
@@ -83,25 +195,26 @@ export function SessionSetsForm({
     initialCompleteSessionState,
   );
 
-  const payload = useMemo(
-    () =>
-      JSON.stringify(
-        drafts.flatMap((draft) =>
-          draft.rows.map((row) => ({
-            planExerciseId: row.planExerciseId,
-            setNumber: row.setNumber,
-            reps: row.reps,
-            weight: row.weight,
-          })),
-        ),
-      ),
-    [drafts],
-  );
+  const payload = useMemo(() => {
+    if (isReadOnly) {
+      return "[]";
+    }
 
-  const updateRow = (
+    return JSON.stringify(
+      drafts.flatMap((draft) =>
+        draft.rows.map((row) => ({
+          planExerciseId: draft.exercise.id,
+          setNumber: String(row.setNumber),
+          reps: String(draft.selectedReps),
+          weight: row.weight.trim(),
+        })),
+      ),
+    );
+  }, [drafts, isReadOnly]);
+
+  const updateWeight = (
     exerciseId: string,
-    localId: string,
-    field: keyof Pick<DraftSetRow, "setNumber" | "reps" | "weight">,
+    setNumber: number,
     value: string,
   ) => {
     setDrafts((previous) =>
@@ -113,37 +226,23 @@ export function SessionSetsForm({
         return {
           ...draft,
           rows: draft.rows.map((row) =>
-            row.localId === localId ? { ...row, [field]: value } : row,
+            row.setNumber === setNumber ? { ...row, weight: value } : row,
           ),
         };
       }),
     );
   };
 
-  const addRow = (exerciseId: string) => {
+  const updateSelectedReps = (exerciseId: string, value: number) => {
     setDrafts((previous) =>
       previous.map((draft) => {
         if (draft.exercise.id !== exerciseId) {
           return draft;
         }
 
-        const maxSet = draft.rows.reduce((max, row) => {
-          const parsed = Number.parseInt(row.setNumber, 10);
-          return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
-        }, 0);
-
         return {
           ...draft,
-          rows: [
-            ...draft.rows,
-            {
-              localId: makeLocalId(),
-              planExerciseId: exerciseId,
-              setNumber: String(maxSet + 1),
-              reps: "",
-              weight: "",
-            },
-          ],
+          selectedReps: clamp(value, draft.repsMin, draft.repsMax),
         };
       }),
     );
@@ -153,8 +252,8 @@ export function SessionSetsForm({
     <section className="placeholder-card workout-card">
       <h2>Фактические сеты</h2>
       <p>
-        Введите выполненные подходы. Повторное сохранение обновляет существующие
-        сеты по ключу exercise + set_number.
+        Повторы выбираются один раз на упражнение и применяются ко всем
+        подходам. Количество подходов фиксируется планом.
       </p>
 
       {isReadOnly ? (
@@ -179,7 +278,7 @@ export function SessionSetsForm({
         <input name="sets_payload" type="hidden" value={payload} />
 
         <div className="workout-exercise-list">
-          {drafts.map((draft) => (
+          {drafts.map((draft, draftIndex) => (
             <article className="workout-exercise-card" key={draft.exercise.id}>
               <header>
                 <h3>{draft.exercise.exerciseName}</h3>
@@ -190,6 +289,13 @@ export function SessionSetsForm({
                 </span>
               </header>
 
+              <RepsControl
+                draft={draft}
+                exerciseIndex={draftIndex}
+                isReadOnly={isReadOnly}
+                onChange={(value) => updateSelectedReps(draft.exercise.id, value)}
+              />
+
               <div className="workout-set-table">
                 <div className="workout-set-row workout-set-head">
                   <span>Сет №</span>
@@ -199,67 +305,35 @@ export function SessionSetsForm({
 
                 {draft.rows.map((row) => (
                   <div className="workout-set-row" key={row.localId}>
-                    <input
-                      disabled={isReadOnly}
-                      inputMode="numeric"
-                      min={1}
-                      onChange={(event) =>
-                        updateRow(
-                          draft.exercise.id,
-                          row.localId,
-                          "setNumber",
-                          event.target.value,
-                        )
-                      }
-                      step={1}
-                      type="number"
-                      value={row.setNumber}
-                    />
-                    <input
-                      disabled={isReadOnly}
-                      inputMode="numeric"
-                      min={0}
-                      onChange={(event) =>
-                        updateRow(
-                          draft.exercise.id,
-                          row.localId,
-                          "reps",
-                          event.target.value,
-                        )
-                      }
-                      step={1}
-                      type="number"
-                      value={row.reps}
-                    />
-                    <input
-                      disabled={isReadOnly}
-                      inputMode="decimal"
-                      min={0}
-                      onChange={(event) =>
-                        updateRow(
-                          draft.exercise.id,
-                          row.localId,
-                          "weight",
-                          event.target.value,
-                        )
-                      }
-                      step={0.25}
-                      type="number"
-                      value={row.weight}
-                    />
+                    <span className="workout-set-static">#{row.setNumber}</span>
+                    <span className="workout-set-static">
+                      {isReadOnly
+                        ? row.savedReps ?? draft.selectedReps
+                        : draft.selectedReps}
+                    </span>
+
+                    {isReadOnly ? (
+                      <span className="workout-set-static">{row.weight}</span>
+                    ) : (
+                      <input
+                        aria-label={`Вес: ${draft.exercise.exerciseName}, сет ${row.setNumber}`}
+                        inputMode="decimal"
+                        min={0}
+                        onChange={(event) =>
+                          updateWeight(
+                            draft.exercise.id,
+                            row.setNumber,
+                            event.target.value,
+                          )
+                        }
+                        step={0.25}
+                        type="number"
+                        value={row.weight}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
-
-              {!isReadOnly ? (
-                <button
-                  className="ghost-button inline-button"
-                  onClick={() => addRow(draft.exercise.id)}
-                  type="button"
-                >
-                  Добавить сет
-                </button>
-              ) : null}
             </article>
           ))}
         </div>

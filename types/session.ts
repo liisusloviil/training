@@ -31,6 +31,11 @@ export type SessionExerciseReadModel = {
   prescribedReps: number | null;
   prescribedRepsMin: number | null;
   prescribedRepsMax: number | null;
+  effectiveSetCount: number;
+  effectiveRepsMin: number;
+  effectiveRepsMax: number;
+  isRepsFallback: boolean;
+  selectedReps?: number;
   rawSetsReps: string;
   sets: SessionSetReadModel[];
 };

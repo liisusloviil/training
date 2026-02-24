@@ -49,15 +49,79 @@ cp .env.example .env.local
 npm run dev
 ```
 
+## Deploy on Vercel (main only)
+
+Текущая стратегия деплоя:
+
+- production деплой только из ветки `main`;
+- домен на старте: `https://<project>.vercel.app`;
+- preview окружения не используются.
+
+### 1. Подготовить GitHub origin
+
+В локальном репозитории должен быть привязан удалённый GitHub:
+
+```bash
+git remote -v
+```
+
+Если `origin` отсутствует, добавить его и запушить `main`:
+
+```bash
+git remote add origin <github_repo_url>
+git push -u origin main
+```
+
+### 2. Настроить проект в Vercel
+
+- Import Git Repository -> выбрать репозиторий;
+- Framework: Next.js (autodetect);
+- Build Command: `npm run build`;
+- Install Command: `npm ci`;
+- Production Branch: `main`;
+- отключить авто-deploy не-main веток.
+
+### 3. Настроить env (Vercel -> Production)
+
+Обязательные runtime env:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Рекомендуемые:
+
+- `NEXT_PUBLIC_APP_URL=https://<project>.vercel.app`
+- `AUTH_LOGIN_EMAIL_DOMAIN` (если используется login -> email mapping)
+
+Не требуются для runtime в Vercel:
+
+- `TEST_USER_A_*`, `TEST_USER_B_*`, `E2E_*`.
+
+### 4. Настроить Supabase Auth URL Configuration
+
+- Site URL: `https://<project>.vercel.app`
+- Redirect URL: `https://<project>.vercel.app/auth/callback`
+- Локальный redirect для dev сохраняется:
+  `http://localhost:3000/auth/callback`
+
+### 5. Проверить production flow
+
+1. Неавторизованный переход на `/plan` редиректит на `/login`.
+2. `/login` и `/register` работают, callback завершает auth.
+3. Полный MVP путь работает: `/import -> /plan -> /workout/new -> /workout/[sessionId] -> /history`.
+4. В Vercel logs нет runtime ошибок Server Actions/Route handlers.
+
+Подробный runbook: `docs/vercel-deploy.md`.
+
 ## Основные маршруты MVP
 
 - `/login` — вход
-- `/register` — регистрация email/password
-- `/auth/callback` — подтверждение email/callback
+- `/register` — регистрация login/password
+- `/auth/callback` — callback маршрута auth (опционально)
 - `/import` — импорт `.xlsx` или `.csv` плана (preview/save)
 - `/plan` — активный план из БД (недели/дни/упражнения)
 - `/workout/new` — создание workout session по дате и дню
-- `/workout/[sessionId]` — ввод сетов и завершение сессии
+- `/workout/[sessionId]` — ввод сетов (фиксированные подходы по плану, выбор reps через выпадающий список на упражнение) и завершение сессии
 - `/history` — список прошлых сессий (read-only)
 - `/history/[sessionId]` — детали сессии (read-only)
 
@@ -116,9 +180,8 @@ npm run test:e2e
 - корректно заполнены:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `E2E_USER_EMAIL` и `E2E_USER_PASSWORD`
-    - если не заданы, тест берёт `TEST_USER_A_EMAIL` / `TEST_USER_A_PASSWORD`
-  - `E2E_REGISTER_EMAIL_DOMAIN` (опционально, домен для генерируемых signup email, например `gmail.com`)
+  - `E2E_USER_LOGIN` и `E2E_USER_PASSWORD`
+    - если `E2E_USER_LOGIN` не задан, тест берёт `E2E_USER_EMAIL` или `TEST_USER_A_EMAIL`
   - `SUPABASE_SERVICE_ROLE_KEY` (опционально, включает e2e проверку полного confirm callback flow)
 
 Используемые import fixtures:
@@ -132,7 +195,7 @@ CI gate:
 - для CI нужно настроить secrets:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `E2E_USER_EMAIL`
+  - `E2E_USER_LOGIN` (или `E2E_USER_EMAIL`)
   - `E2E_USER_PASSWORD`
 
 ## Security Note (`xlsx`)

@@ -55,12 +55,84 @@ type SetRow = {
   weight: number;
 };
 
+type ExerciseRule = {
+  effectiveSetCount: number;
+  effectiveRepsMin: number;
+  effectiveRepsMax: number;
+};
+
 function isMissingRepsRangeColumnsError(message: string) {
   const normalized = message.toLowerCase();
   return (
     normalized.includes("prescribed_reps_min") ||
     normalized.includes("prescribed_reps_max")
   );
+}
+
+export function resolveEffectiveSetCount(
+  prescribedSets: number | null | undefined,
+): number {
+  if (Number.isInteger(prescribedSets) && Number(prescribedSets) > 0) {
+    return Number(prescribedSets);
+  }
+
+  return 1;
+}
+
+export function resolveEffectiveRepsRange(input: {
+  prescribedReps: number | null;
+  prescribedRepsMin: number | null;
+  prescribedRepsMax: number | null;
+}): { min: number; max: number; isFallback: boolean } {
+  const minFromRange = input.prescribedRepsMin;
+  const maxFromRange = input.prescribedRepsMax;
+
+  if (
+    Number.isInteger(minFromRange) &&
+    Number.isInteger(maxFromRange) &&
+    Number(minFromRange) > 0 &&
+    Number(maxFromRange) > 0 &&
+    Number(minFromRange) <= Number(maxFromRange)
+  ) {
+    return {
+      min: Number(minFromRange),
+      max: Number(maxFromRange),
+      isFallback: false,
+    };
+  }
+
+  if (Number.isInteger(input.prescribedReps) && Number(input.prescribedReps) > 0) {
+    const reps = Number(input.prescribedReps);
+    return {
+      min: reps,
+      max: reps,
+      isFallback: false,
+    };
+  }
+
+  if (Number.isInteger(minFromRange) && Number(minFromRange) > 0) {
+    const reps = Number(minFromRange);
+    return {
+      min: reps,
+      max: reps,
+      isFallback: false,
+    };
+  }
+
+  if (Number.isInteger(maxFromRange) && Number(maxFromRange) > 0) {
+    const reps = Number(maxFromRange);
+    return {
+      min: reps,
+      max: reps,
+      isFallback: false,
+    };
+  }
+
+  return {
+    min: 1,
+    max: 1,
+    isFallback: true,
+  };
 }
 
 export async function getWorkoutNewContextQuery(): Promise<WorkoutNewContext | null> {
@@ -280,18 +352,30 @@ export async function getSessionDetailsQuery(
     list.sort((a, b) => a.setNumber - b.setNumber);
   }
 
-  const exerciseModels: SessionExerciseReadModel[] = exercises.map((exercise) => ({
-    id: exercise.id,
-    sortOrder: exercise.sort_order,
-    exerciseName: exercise.exercise_name,
-    intensity: exercise.intensity,
-    prescribedSets: exercise.prescribed_sets,
-    prescribedReps: exercise.prescribed_reps,
-    prescribedRepsMin: exercise.prescribed_reps_min,
-    prescribedRepsMax: exercise.prescribed_reps_max,
-    rawSetsReps: exercise.raw_sets_reps,
-    sets: setsByExercise.get(exercise.id) ?? [],
-  }));
+  const exerciseModels: SessionExerciseReadModel[] = exercises.map((exercise) => {
+    const repsRange = resolveEffectiveRepsRange({
+      prescribedReps: exercise.prescribed_reps,
+      prescribedRepsMin: exercise.prescribed_reps_min,
+      prescribedRepsMax: exercise.prescribed_reps_max,
+    });
+
+    return {
+      id: exercise.id,
+      sortOrder: exercise.sort_order,
+      exerciseName: exercise.exercise_name,
+      intensity: exercise.intensity,
+      prescribedSets: exercise.prescribed_sets,
+      prescribedReps: exercise.prescribed_reps,
+      prescribedRepsMin: exercise.prescribed_reps_min,
+      prescribedRepsMax: exercise.prescribed_reps_max,
+      effectiveSetCount: resolveEffectiveSetCount(exercise.prescribed_sets),
+      effectiveRepsMin: repsRange.min,
+      effectiveRepsMax: repsRange.max,
+      isRepsFallback: repsRange.isFallback,
+      rawSetsReps: exercise.raw_sets_reps,
+      sets: setsByExercise.get(exercise.id) ?? [],
+    };
+  });
 
   return {
     id: session.id,
@@ -402,20 +486,45 @@ export async function verifyPlanDayBelongsActivePlan(planDayId: string) {
   };
 }
 
-export async function getExerciseIdsForPlanDay(planDayId: string) {
+export async function getPlanExerciseRulesForPlanDay(
+  planDayId: string,
+): Promise<Map<string, ExerciseRule>> {
   const user = await requireUser();
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("plan_exercises")
-    .select("id")
+    .select("id, prescribed_sets, prescribed_reps, prescribed_reps_min, prescribed_reps_max")
     .eq("user_id", user.id)
     .eq("day_id", planDayId)
-    .returns<Array<{ id: string }>>();
+    .returns<
+      Array<{
+        id: string;
+        prescribed_sets: number | null;
+        prescribed_reps: number | null;
+        prescribed_reps_min: number | null;
+        prescribed_reps_max: number | null;
+      }>
+    >();
 
   if (error) {
     throw new Error(`Не удалось получить упражнения дня плана: ${error.message}`);
   }
 
-  return new Set((data ?? []).map((item) => item.id));
+  const rules = new Map<string, ExerciseRule>();
+  for (const exercise of data ?? []) {
+    const repsRange = resolveEffectiveRepsRange({
+      prescribedReps: exercise.prescribed_reps,
+      prescribedRepsMin: exercise.prescribed_reps_min,
+      prescribedRepsMax: exercise.prescribed_reps_max,
+    });
+
+    rules.set(exercise.id, {
+      effectiveSetCount: resolveEffectiveSetCount(exercise.prescribed_sets),
+      effectiveRepsMin: repsRange.min,
+      effectiveRepsMax: repsRange.max,
+    });
+  }
+
+  return rules;
 }

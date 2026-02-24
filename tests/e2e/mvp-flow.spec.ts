@@ -10,11 +10,14 @@ const invalidFixturePath = resolve(
   "tests/fixtures/import/invalid-range.csv",
 );
 
-const e2eUserEmail =
-  process.env.E2E_USER_EMAIL ?? process.env.TEST_USER_A_EMAIL ?? "";
+const e2eUserLogin =
+  process.env.E2E_USER_LOGIN ??
+  process.env.E2E_USER_EMAIL ??
+  process.env.TEST_USER_A_EMAIL ??
+  "";
 const e2eUserPassword =
   process.env.E2E_USER_PASSWORD ?? process.env.TEST_USER_A_PASSWORD ?? "";
-const hasE2eAuth = Boolean(e2eUserEmail && e2eUserPassword);
+const hasE2eAuth = Boolean(e2eUserLogin && e2eUserPassword);
 
 const testWithAuth = hasE2eAuth ? test : test.skip;
 test.describe.configure({ timeout: 120_000 });
@@ -23,7 +26,7 @@ async function login(page: Page) {
   await page.goto("/plan");
   await expect(page).toHaveURL(/\/login/);
 
-  await page.getByRole("textbox", { name: "Email" }).fill(e2eUserEmail);
+  await page.getByRole("textbox", { name: "Логин" }).fill(e2eUserLogin);
   await page.getByRole("textbox", { name: "Пароль" }).fill(e2eUserPassword);
   await page.getByRole("button", { name: "Войти" }).click();
 
@@ -68,18 +71,59 @@ testWithAuth("full mvp flow: login -> import -> plan -> workout -> history", asy
   const sessionId = workoutUrl.split("/").pop() ?? "";
   expect(sessionId).toHaveLength(36);
 
-  const spinbuttons = page.getByRole("spinbutton");
-  await spinbuttons.nth(1).fill("8");
-  await spinbuttons.nth(2).fill("100");
-  await spinbuttons.nth(4).fill("5");
-  await spinbuttons.nth(5).fill("80");
+  await expect(page.getByRole("button", { name: "Добавить сет" })).toHaveCount(0);
+  await expect(
+    page.locator('.workout-set-row input[type="number"][min="1"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('input[type="range"]')).toHaveCount(0);
+
+  const firstExerciseCard = page.locator(".workout-exercise-card").first();
+  const repsLabel = firstExerciseCard.locator(".workout-reps-control-head span").first();
+  await expect(repsLabel).toHaveText(/Повторы для упражнения \d+:/);
+  await expect(repsLabel).not.toHaveText(/упражнения\d/);
+  const repsSelect = firstExerciseCard.locator("select").first();
+  await expect(repsSelect).toBeVisible();
+  const repsOptions = await repsSelect
+    .locator("option")
+    .allTextContents()
+    .then((values) => values.map((value) => value.trim()));
+  expect(repsOptions).toEqual(["8", "9", "10", "11", "12"]);
+  await repsSelect.selectOption("11");
+
+  const firstExerciseRows = firstExerciseCard.locator(
+    ".workout-set-row:not(.workout-set-head)",
+  );
+  const firstRepsCell = firstExerciseRows.nth(0).locator(".workout-set-static").nth(1);
+  await expect(firstRepsCell).toHaveText("11");
+  const selectedRepsValue = 11;
+  const rowsCount = await firstExerciseRows.count();
+  if (rowsCount > 1) {
+    await expect(
+      firstExerciseRows.nth(1).locator(".workout-set-static").nth(1),
+    ).toHaveText("11");
+  }
+
+  const weightInputs = page.locator('input[aria-label^="Вес:"]');
+  const weightCount = await weightInputs.count();
+  expect(weightCount).toBeGreaterThan(0);
+  for (let index = 0; index < weightCount; index += 1) {
+    await weightInputs.nth(index).fill("50");
+  }
 
   await page.getByRole("button", { name: "Сохранить сеты" }).click();
   await expect(page.getByText("Сеты сохранены:")).toBeVisible();
 
   await page.reload();
-  await expect(spinbuttons.nth(1)).toHaveValue("8");
-  await expect(spinbuttons.nth(2)).toHaveValue("100");
+  await expect(
+    page
+      .locator(".workout-exercise-card")
+      .first()
+      .locator(".workout-set-row:not(.workout-set-head)")
+      .nth(0)
+      .locator(".workout-set-static")
+      .nth(1),
+  ).toHaveText(String(selectedRepsValue));
+  await expect(page.locator('input[aria-label^="Вес:"]').first()).toHaveValue("50");
 
   await page.getByRole("button", { name: "Завершить тренировку" }).click();
   await expect(

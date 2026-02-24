@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="auth-page">
       <section className="auth-card">
         <h1>Вход в дневник тренировок</h1>
-        <p>Войдите в аккаунт Supabase, чтобы открыть приложение.</p>
+        <p>Войдите по логину и паролю, чтобы открыть приложение.</p>
 
         {error ? <div className="error-message">{error}</div> : null}
 
@@ -20,13 +20,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <input type="hidden" name="next" value={next ?? "/"} />
 
           <label>
-            Email
+            Логин
             <input
-              autoComplete="email"
-              name="email"
-              placeholder="you@example.com"
+              autoComplete="username"
+              name="login"
+              placeholder="your_login"
               required
-              type="email"
+              type="text"
             />
           </label>
 

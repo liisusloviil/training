@@ -7,11 +7,12 @@ import {
   completeWorkoutSession,
   createWorkoutSession,
   findSessionByDateAndDay,
+  pruneSessionSetsOutsideAllowed,
   upsertSessionSets,
 } from "@/lib/db/session-repository";
 import {
   countSessionSetsForUser,
-  getExerciseIdsForPlanDay,
+  getPlanExerciseRulesForPlanDay,
   getSessionStatusForUser,
   verifyPlanDayBelongsActivePlan,
 } from "@/lib/db/session-queries";
@@ -180,7 +181,7 @@ export async function upsertSessionSetsAction(
     return actionError("Сессия уже завершена и доступна только для чтения.");
   }
 
-  const exerciseIds = await getExerciseIdsForPlanDay(session.planDayId);
+  const exerciseRules = await getPlanExerciseRulesForPlanDay(session.planDayId);
 
   let incomingSets: IncomingSet[];
   try {
@@ -192,6 +193,7 @@ export async function upsertSessionSetsAction(
   }
 
   const validSets = new Map<string, SessionSetInput>();
+  const repsByExercise = new Map<string, number>();
 
   for (let index = 0; index < incomingSets.length; index += 1) {
     const row = incomingSets[index];
@@ -202,16 +204,12 @@ export async function upsertSessionSetsAction(
     const repsRaw = String(row.reps ?? "").trim();
     const weightRaw = String(row.weight ?? "").trim();
 
-    const isEmptyRow = !repsRaw && !weightRaw;
-    if (isEmptyRow) {
-      continue;
-    }
-
     if (!isUuid(planExerciseId)) {
       return actionError(`Строка ${rowNumber}: некорректный planExerciseId.`);
     }
 
-    if (!exerciseIds.has(planExerciseId)) {
+    const exerciseRule = exerciseRules.get(planExerciseId);
+    if (!exerciseRule) {
       return actionError(
         `Строка ${rowNumber}: упражнение не принадлежит дню этой сессии.`,
       );
@@ -219,7 +217,7 @@ export async function upsertSessionSetsAction(
 
     if (!setNumberRaw || !repsRaw || !weightRaw) {
       return actionError(
-        `Строка ${rowNumber}: заполните set_number, reps и weight.`,
+        `Строка ${rowNumber}: заполните set_number, reps и weight для каждого подхода.`,
       );
     }
 
@@ -233,15 +231,35 @@ export async function upsertSessionSetsAction(
       );
     }
 
+    if (setNumber > exerciseRule.effectiveSetCount) {
+      return actionError(
+        `Строка ${rowNumber}: set_number превышает число подходов по плану (${exerciseRule.effectiveSetCount}).`,
+      );
+    }
+
     if (!Number.isInteger(reps) || reps < 0) {
       return actionError(
         `Строка ${rowNumber}: reps должен быть целым числом >= 0.`,
       );
     }
 
+    if (reps < exerciseRule.effectiveRepsMin || reps > exerciseRule.effectiveRepsMax) {
+      return actionError(
+        `Строка ${rowNumber}: reps вне допустимого диапазона ${exerciseRule.effectiveRepsMin}-${exerciseRule.effectiveRepsMax}.`,
+      );
+    }
+
     if (!Number.isFinite(weight) || weight < 0) {
       return actionError(`Строка ${rowNumber}: weight должен быть числом >= 0.`);
     }
+
+    const previousReps = repsByExercise.get(planExerciseId);
+    if (previousReps !== undefined && previousReps !== reps) {
+      return actionError(
+        `Строка ${rowNumber}: для упражнения все подходы должны иметь одинаковый reps.`,
+      );
+    }
+    repsByExercise.set(planExerciseId, reps);
 
     const key = `${planExerciseId}-${setNumber}`;
     validSets.set(key, {
@@ -256,14 +274,43 @@ export async function upsertSessionSetsAction(
     return actionError("Добавьте минимум один корректный сет для сохранения.");
   }
 
+  const countsByExercise = new Map<string, number>();
+  for (const set of validSets.values()) {
+    countsByExercise.set(
+      set.planExerciseId,
+      (countsByExercise.get(set.planExerciseId) ?? 0) + 1,
+    );
+  }
+
+  for (const [exerciseId, rule] of exerciseRules.entries()) {
+    const actualCount = countsByExercise.get(exerciseId) ?? 0;
+    if (actualCount !== rule.effectiveSetCount) {
+      return actionError(
+        `Упражнение содержит неполный набор подходов: ожидается ${rule.effectiveSetCount}, получено ${actualCount}.`,
+      );
+    }
+  }
+
   const supabase = await createClient();
 
   try {
+    const values = Array.from(validSets.values());
+
     await upsertSessionSets({
       supabase,
       userId: session.userId,
       sessionId,
-      sets: Array.from(validSets.values()),
+      sets: values,
+    });
+
+    await pruneSessionSetsOutsideAllowed({
+      supabase,
+      userId: session.userId,
+      sessionId,
+      planExerciseIds: Array.from(exerciseRules.keys()),
+      allowedCompositeKeys: new Set(
+        values.map((set) => `${set.planExerciseId}-${set.setNumber}`),
+      ),
     });
 
     revalidatePath(`/workout/${sessionId}`);

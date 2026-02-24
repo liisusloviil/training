@@ -100,3 +100,21 @@ npm run test:e2e
 - auth registration checklist: `TESTING_AUTH_REGISTRATION.md`
 - stage QA notes: `TESTING_STAGE_1.md` ... `TESTING_STAGE_8.md`
 - release candidate tag/версия: `v0.1.0-mvp`
+
+## Cloud Deploy Checklist (Vercel, main only)
+
+- [ ] GitHub `origin` настроен, `main` опубликована
+- [ ] Vercel проект создан из GitHub репозитория
+- [ ] Production Branch в Vercel = `main`
+- [ ] Auto-deploy не-main веток отключён
+- [ ] В Vercel Production заданы:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `NEXT_PUBLIC_APP_URL` (рекомендовано)
+- [ ] В Supabase Auth URL Configuration заданы:
+  - `https://<project>.vercel.app`
+  - `https://<project>.vercel.app/auth/callback`
+  - `http://localhost:3000/auth/callback` (для локальной разработки)
+- [ ] На `https://<project>.vercel.app` пройден MVP smoke flow
+
+Подробный runbook: `docs/vercel-deploy.md`.

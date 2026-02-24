@@ -82,6 +82,60 @@ export async function upsertSessionSets(params: {
   }
 }
 
+export async function pruneSessionSetsOutsideAllowed(params: {
+  supabase: SupabaseClient;
+  userId: string;
+  sessionId: string;
+  planExerciseIds: string[];
+  allowedCompositeKeys: Set<string>;
+}) {
+  const {
+    supabase,
+    userId,
+    sessionId,
+    planExerciseIds,
+    allowedCompositeKeys,
+  } = params;
+
+  if (!planExerciseIds.length) {
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("session_sets")
+    .select("id, plan_exercise_id, set_number")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .in("plan_exercise_id", planExerciseIds)
+    .returns<Array<{ id: string; plan_exercise_id: string; set_number: number }>>();
+
+  if (error) {
+    throw new Error(`Не удалось проверить существующие сеты: ${error.message}`);
+  }
+
+  const idsToDelete = (data ?? [])
+    .filter(
+      (row) =>
+        !allowedCompositeKeys.has(`${row.plan_exercise_id}-${row.set_number}`),
+    )
+    .map((row) => row.id);
+
+  if (!idsToDelete.length) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("session_sets")
+    .delete()
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .in("id", idsToDelete);
+
+  if (deleteError) {
+    throw new Error(`Не удалось удалить устаревшие сеты: ${deleteError.message}`);
+  }
+}
+
 export async function completeWorkoutSession(params: {
   supabase: SupabaseClient;
   userId: string;
