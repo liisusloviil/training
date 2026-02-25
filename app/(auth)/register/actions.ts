@@ -1,15 +1,12 @@
 "use server";
 
 import { headers } from "next/headers";
+import { isValidEmail, normalizeEmail } from "@/lib/auth-email";
+import { isValidUsername, normalizeUsername } from "@/lib/auth-username";
 import { createClient } from "@/lib/supabase/server";
 import type { RegisterActionState } from "@/types/auth-register";
 
 const MIN_PASSWORD_LENGTH = 8;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function isValidEmail(value: string): boolean {
-  return EMAIL_REGEX.test(value.trim().toLowerCase());
-}
 
 async function getAppOrigin(): Promise<string> {
   const envOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -35,9 +32,8 @@ export async function signUpWithPasswordAction(
   _previousState: RegisterActionState,
   formData: FormData,
 ): Promise<RegisterActionState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const username = normalizeUsername(String(formData.get("username") ?? ""));
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
 
@@ -45,6 +41,14 @@ export async function signUpWithPasswordAction(
     return {
       status: "error",
       message: "Введите корректный email.",
+    };
+  }
+
+  if (!isValidUsername(username)) {
+    return {
+      status: "error",
+      message:
+        "Username должен содержать 3-32 символа: строчные латинские буквы, цифры или underscore.",
     };
   }
 
@@ -64,6 +68,25 @@ export async function signUpWithPasswordAction(
 
   try {
     const supabase = await createClient();
+    const { data: isUsernameAvailable, error: usernameCheckError } =
+      await supabase.rpc("is_username_available", {
+        p_username: username,
+      });
+
+    if (usernameCheckError) {
+      return {
+        status: "error",
+        message: "Не удалось проверить username. Попробуйте снова позже.",
+      };
+    }
+
+    if (!isUsernameAvailable) {
+      return {
+        status: "error",
+        message: "Этот username уже занят. Выберите другой.",
+      };
+    }
+
     const appOrigin = await getAppOrigin();
     const redirectUrl = new URL("/auth/callback", appOrigin);
     redirectUrl.searchParams.set("next", "/");
@@ -73,6 +96,9 @@ export async function signUpWithPasswordAction(
       password,
       options: {
         emailRedirectTo: redirectUrl.toString(),
+        data: {
+          username,
+        },
       },
     });
 

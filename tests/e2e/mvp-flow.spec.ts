@@ -10,14 +10,11 @@ const invalidFixturePath = resolve(
   "tests/fixtures/import/invalid-range.csv",
 );
 
-const e2eUserLogin =
-  process.env.E2E_USER_LOGIN ??
-  process.env.E2E_USER_EMAIL ??
-  process.env.TEST_USER_A_EMAIL ??
-  "";
+const e2eUserEmail =
+  process.env.E2E_USER_EMAIL ?? process.env.TEST_USER_A_EMAIL ?? "";
 const e2eUserPassword =
   process.env.E2E_USER_PASSWORD ?? process.env.TEST_USER_A_PASSWORD ?? "";
-const hasE2eAuth = Boolean(e2eUserLogin && e2eUserPassword);
+const hasE2eAuth = Boolean(e2eUserEmail && e2eUserPassword);
 
 const testWithAuth = hasE2eAuth ? test : test.skip;
 test.describe.configure({ timeout: 120_000 });
@@ -26,7 +23,7 @@ async function login(page: Page) {
   await page.goto("/plan");
   await expect(page).toHaveURL(/\/login/);
 
-  await page.getByRole("textbox", { name: "Email или логин" }).fill(e2eUserLogin);
+  await page.getByRole("textbox", { name: "Email" }).fill(e2eUserEmail);
   await page.getByRole("textbox", { name: "Пароль" }).fill(e2eUserPassword);
   await page.getByRole("button", { name: "Войти" }).click();
 

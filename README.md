@@ -91,7 +91,6 @@ git push -u origin main
 Рекомендуемые:
 
 - `NEXT_PUBLIC_APP_URL=https://<project>.vercel.app`
-- `AUTH_LOGIN_EMAIL_DOMAIN` (если используется login -> email mapping)
 
 Не требуются для runtime в Vercel:
 
@@ -116,7 +115,7 @@ git push -u origin main
 ## Основные маршруты MVP
 
 - `/login` — вход
-- `/register` — регистрация login/password
+- `/register` — регистрация email/username/password
 - `/auth/callback` — callback маршрута auth (опционально)
 - `/import` — импорт `.xlsx` или `.csv` плана (preview/save)
 - `/plan` — активный план из БД (недели/дни/упражнения)
@@ -180,8 +179,8 @@ npm run test:e2e
 - корректно заполнены:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `E2E_USER_LOGIN` и `E2E_USER_PASSWORD`
-    - если `E2E_USER_LOGIN` не задан, тест берёт `E2E_USER_EMAIL` или `TEST_USER_A_EMAIL`
+  - `E2E_USER_EMAIL` и `E2E_USER_PASSWORD`
+    - если `E2E_USER_EMAIL` не задан, тест берёт `TEST_USER_A_EMAIL`
   - `SUPABASE_SERVICE_ROLE_KEY` (опционально, включает e2e проверку полного confirm callback flow)
 
 Используемые import fixtures:
@@ -195,7 +194,7 @@ CI gate:
 - для CI нужно настроить secrets:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `E2E_USER_LOGIN` (или `E2E_USER_EMAIL`)
+  - `E2E_USER_EMAIL`
   - `E2E_USER_PASSWORD`
 
 ## Security Note (`xlsx`)

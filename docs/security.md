@@ -6,6 +6,7 @@
 
 - `supabase/migrations/20260223185118_stage3_rls.sql`
 - `supabase/migrations/20260223185119_stage3_storage.sql`
+- `supabase/migrations/20260225231000_stage10_user_profiles.sql`
 
 ## Что включено
 
@@ -18,6 +19,7 @@ RLS включён на всех таблицах предметной обла�
 - `public.plan_exercises`
 - `public.workout_sessions`
 - `public.session_sets`
+- `public.user_profiles` (RLS по `user_id = auth.uid()`, select/insert/update только для владельца)
 
 Для каждой таблицы созданы политики `SELECT/INSERT/UPDATE/DELETE` по правилу:
 - доступ только если `user_id = auth.uid()`
@@ -25,6 +27,9 @@ RLS включён на всех таблицах предметной обла�
 Это гарантирует:
 - пользователь A не читает и не меняет данные пользователя B;
 - владелец данных сохраняет полный CRUD-доступ к своим строкам.
+
+Для проверки доступности username при signup добавлена функция:
+- `public.is_username_available(text)` (security definer, `grant execute` для `anon/authenticated`).
 
 ### 2) Storage bucket и политики
 

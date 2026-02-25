@@ -7,12 +7,22 @@ function buildUniqueEmail() {
   return `${local}@${domain}`;
 }
 
+function buildUniqueUsername() {
+  return `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
 const neutralRegistrationError =
   "Не удалось завершить регистрацию. Проверьте данные и попробуйте снова.";
 
-async function submitRegisterForm(page: Page, email: string, password: string) {
+async function submitRegisterForm(
+  page: Page,
+  email: string,
+  username: string,
+  password: string,
+) {
   await page.goto("/register");
   await page.getByRole("textbox", { name: "Email" }).fill(email);
+  await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Пароль", { exact: true }).fill(password);
   await page.getByLabel("Подтвердите пароль").fill(password);
   await page.getByRole("button", { name: "Создать аккаунт" }).click();
@@ -51,9 +61,10 @@ async function waitForRegisterResult(page: Page): Promise<{
 
 test("register form submit returns user-facing state", async ({ page }) => {
   const email = buildUniqueEmail();
+  const username = buildUniqueUsername();
   const password = "RegisterPass123";
 
-  await submitRegisterForm(page, email, password);
+  await submitRegisterForm(page, email, username, password);
   const result = await waitForRegisterResult(page);
 
   if (result.status === "success") {

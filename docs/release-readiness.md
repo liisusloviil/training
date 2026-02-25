@@ -77,9 +77,9 @@ npm run test:e2e
 ```
 
 8. Проверить signup flow:
-- `/register` отправляет форму и показывает check-email state;
+- `/register` принимает `email + username + password + confirmPassword` и показывает check-email state;
 - `/auth/callback` корректно завершает подтверждение;
-- `/login` и `/register` связаны ссылками и guard работает.
+- `/login` (email/password) и `/register` связаны ссылками и guard работает.
 
 9. Проверить отсутствие открытых P0/P1 в текущем списке дефектов.
 

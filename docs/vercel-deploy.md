@@ -69,7 +69,6 @@ DoD:
 Рекомендуемые:
 
 - `NEXT_PUBLIC_APP_URL=https://<project>.vercel.app`
-- `AUTH_LOGIN_EMAIL_DOMAIN` (если используется login -> email mapping)
 
 Не добавлять как runtime env:
 

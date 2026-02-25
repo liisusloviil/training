@@ -6,8 +6,22 @@
 
 - `supabase/migrations/20260223184735_stage2_training_schema.sql`
 - `supabase/migrations/20260223222500_stage9_reps_range.sql`
+- `supabase/migrations/20260225231000_stage10_user_profiles.sql`
 
 ## Доменные таблицы
+
+### `user_profiles`
+
+Назначение: профиль пользователя для публичного `username`.
+
+Поля:
+- `user_id uuid pk -> auth.users(id)`
+- `username text not null` (regex: `^[a-z0-9_]{3,32}$`)
+- `created_at timestamptz not null default now()`
+- `updated_at timestamptz not null default now()`
+
+Ограничения:
+- `unique(username)`
 
 ### `training_plans`
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { isValidLogin, resolveAuthEmail } from "@/lib/auth-login";
+import { isValidEmail, normalizeEmail } from "@/lib/auth-email";
 import { createClient } from "@/lib/supabase/server";
 
 function withError(message: string) {
@@ -9,25 +9,18 @@ function withError(message: string) {
 }
 
 export async function signInWithPasswordAction(formData: FormData) {
-  const identifier = String(
-    formData.get("identifier") ?? formData.get("login") ?? "",
-  ).trim();
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
   const nextPath = String(formData.get("next") ?? "/");
 
-  if (!identifier || !password) {
-    redirect(withError("Введите email или логин и пароль."));
+  if (!email || !password) {
+    redirect(withError("Введите email и пароль."));
   }
 
-  if (!identifier.includes("@") && !isValidLogin(identifier)) {
-    redirect(
-      withError(
-        "Логин должен содержать 3-32 символа: латинские буквы, цифры, точка, дефис или underscore.",
-      ),
-    );
+  if (!isValidEmail(email)) {
+    redirect(withError("Введите корректный email."));
   }
 
-  const email = resolveAuthEmail(identifier);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -35,7 +28,7 @@ export async function signInWithPasswordAction(formData: FormData) {
   });
 
   if (error) {
-    redirect(withError("Не удалось войти. Проверьте логин и пароль."));
+    redirect(withError("Не удалось войти. Проверьте email и пароль."));
   }
 
   if (nextPath.startsWith("/") && !nextPath.startsWith("//")) {

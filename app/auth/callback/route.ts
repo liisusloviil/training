@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { isValidUsername, normalizeUsername } from "@/lib/auth-username";
 
 function getSupabaseEnv() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,6 +49,45 @@ function redirectWithError(appOrigin: string, message: string) {
   return NextResponse.redirect(url);
 }
 
+async function syncUserProfile(
+  supabase: ReturnType<typeof createServerClient>,
+): Promise<null | string> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return "Не удалось получить данные пользователя после подтверждения email.";
+  }
+
+  const rawUsername = user.user_metadata?.username;
+  if (typeof rawUsername !== "string" || !rawUsername.trim()) {
+    return null;
+  }
+
+  const username = normalizeUsername(rawUsername);
+  if (!isValidUsername(username)) {
+    return "Не удалось завершить регистрацию: некорректный username.";
+  }
+
+  const { error: profileError } = await supabase.from("user_profiles").upsert(
+    {
+      user_id: user.id,
+      username,
+    },
+    {
+      onConflict: "user_id",
+    },
+  );
+
+  if (profileError) {
+    return "Не удалось завершить регистрацию: username уже занят или недоступен.";
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const nextPath = getSafeNextPath(url.searchParams.get("next"));
@@ -78,6 +118,10 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const syncError = await syncUserProfile(supabase);
+      if (syncError) {
+        return redirectWithError(appOrigin, syncError);
+      }
       return successResponse;
     }
   }
@@ -91,6 +135,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!error) {
+      const syncError = await syncUserProfile(supabase);
+      if (syncError) {
+        return redirectWithError(appOrigin, syncError);
+      }
       return successResponse;
     }
   }

@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="auth-page">
       <section className="auth-card">
         <h1>Вход в дневник тренировок</h1>
-        <p>Войдите по email или логину и паролю, чтобы открыть приложение.</p>
+        <p>Войдите по email и паролю, чтобы открыть приложение.</p>
 
         {error ? <div className="error-message">{error}</div> : null}
 
@@ -20,13 +20,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <input type="hidden" name="next" value={next ?? "/"} />
 
           <label>
-            Email или логин
+            Email
             <input
-              autoComplete="username"
-              name="identifier"
-              placeholder="you@example.com или your_login"
+              autoComplete="email"
+              name="email"
+              placeholder="you@example.com"
               required
-              type="text"
+              type="email"
             />
           </label>
 
