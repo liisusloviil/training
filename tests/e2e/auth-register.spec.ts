@@ -1,16 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
-function buildUniqueLogin() {
-  return `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+function buildUniqueEmail() {
+  const local = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const domain = process.env.E2E_REGISTER_EMAIL_DOMAIN ?? "example.com";
+  return `${local}@${domain}`;
 }
 
 const neutralRegistrationError =
   "Не удалось завершить регистрацию. Проверьте данные и попробуйте снова.";
 
-async function submitRegisterForm(page: Page, login: string, password: string) {
+async function submitRegisterForm(page: Page, email: string, password: string) {
   await page.goto("/register");
-  await page.getByRole("textbox", { name: "Логин" }).fill(login);
+  await page.getByRole("textbox", { name: "Email" }).fill(email);
   await page.getByLabel("Пароль", { exact: true }).fill(password);
   await page.getByLabel("Подтвердите пароль").fill(password);
   await page.getByRole("button", { name: "Создать аккаунт" }).click();
@@ -48,14 +50,14 @@ async function waitForRegisterResult(page: Page): Promise<{
 }
 
 test("register form submit returns user-facing state", async ({ page }) => {
-  const login = buildUniqueLogin();
+  const email = buildUniqueEmail();
   const password = "RegisterPass123";
 
-  await submitRegisterForm(page, login, password);
+  await submitRegisterForm(page, email, password);
   const result = await waitForRegisterResult(page);
 
   if (result.status === "success") {
-    expect(result.message).toContain("по логину");
+    expect(result.message.toLowerCase()).toContain("проверьте почту");
     return;
   }
 
@@ -95,9 +97,7 @@ testWithAdminConfirmFlow(
     const appOrigin =
       process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "") ||
       "http://localhost:3000";
-    const login = buildUniqueLogin();
-    const emailDomain = process.env.AUTH_LOGIN_EMAIL_DOMAIN ?? "login.local";
-    const email = `${login}@${emailDomain}`;
+    const email = buildUniqueEmail();
     const password = "RegisterPass123";
     const redirectTo = `${appOrigin}/auth/callback?next=/plan`;
 

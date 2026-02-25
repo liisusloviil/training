@@ -26,7 +26,7 @@ async function login(page: Page) {
   await page.goto("/plan");
   await expect(page).toHaveURL(/\/login/);
 
-  await page.getByRole("textbox", { name: "Логин" }).fill(e2eUserLogin);
+  await page.getByRole("textbox", { name: "Email или логин" }).fill(e2eUserLogin);
   await page.getByRole("textbox", { name: "Пароль" }).fill(e2eUserPassword);
   await page.getByRole("button", { name: "Войти" }).click();
 

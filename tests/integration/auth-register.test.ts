@@ -21,25 +21,25 @@ describe("integration: auth register action", () => {
         signUp: signUpMock,
       },
     });
-    delete process.env.AUTH_LOGIN_EMAIL_DOMAIN;
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
   });
 
-  it("returns validation error for invalid login", async () => {
+  it("returns validation error for invalid email", async () => {
     const formData = new FormData();
-    formData.set("login", "bad login");
+    formData.set("email", "bad-email");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 
     const result = await signUpWithPasswordAction({ status: "idle" }, formData);
 
     expect(result.status).toBe("error");
-    expect(result.message?.toLowerCase()).toContain("логин");
+    expect(result.message?.toLowerCase()).toContain("email");
     expect(signUpMock).not.toHaveBeenCalled();
   });
 
   it("returns validation error for short password", async () => {
     const formData = new FormData();
-    formData.set("login", "test_user");
+    formData.set("email", "test.user@example.com");
     formData.set("password", "short");
     formData.set("confirmPassword", "short");
 
@@ -52,7 +52,7 @@ describe("integration: auth register action", () => {
 
   it("returns validation error for password mismatch", async () => {
     const formData = new FormData();
-    formData.set("login", "test_user");
+    formData.set("email", "test.user@example.com");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass456");
 
@@ -63,25 +63,22 @@ describe("integration: auth register action", () => {
     expect(signUpMock).not.toHaveBeenCalled();
   });
 
-  it("signs up user and returns success state", async () => {
-    process.env.AUTH_LOGIN_EMAIL_DOMAIN = "login.local";
+  it("signs up user with emailRedirectTo and returns success state", async () => {
     const formData = new FormData();
-    formData.set("login", "new.user");
+    formData.set("email", "new.user@example.com");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 
     const result = await signUpWithPasswordAction({ status: "idle" }, formData);
 
     expect(result.status).toBe("success");
-    expect(result.message).toContain("по логину");
+    expect(result.message).toContain("Проверьте почту");
     expect(signUpMock).toHaveBeenCalledTimes(1);
     expect(signUpMock).toHaveBeenCalledWith({
-      email: "new.user@login.local",
+      email: "new.user@example.com",
       password: "StrongPass123",
       options: {
-        data: {
-          login: "new.user",
-        },
+        emailRedirectTo: "http://localhost:3000/auth/callback?next=%2F",
       },
     });
   });
@@ -91,7 +88,7 @@ describe("integration: auth register action", () => {
       error: { message: "User already registered" },
     });
     const formData = new FormData();
-    formData.set("login", "existing_user");
+    formData.set("email", "existing.user@example.com");
     formData.set("password", "StrongPass123");
     formData.set("confirmPassword", "StrongPass123");
 

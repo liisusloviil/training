@@ -19,7 +19,7 @@ export default function RegisterPage() {
     <main className="auth-page">
       <section className="auth-card">
         <h1>Регистрация</h1>
-        <p>Создайте аккаунт по логину и паролю.</p>
+        <p>Создайте аккаунт по email и паролю.</p>
 
         {state.status === "error" && state.message ? (
           <div className="error-message">{state.message}</div>
@@ -31,13 +31,13 @@ export default function RegisterPage() {
 
         <form className="auth-form" action={formAction}>
           <label>
-            Логин
+            Email
             <input
-              autoComplete="username"
-              name="login"
-              placeholder="your_login"
+              autoComplete="email"
+              name="email"
+              placeholder="you@example.com"
               required
-              type="text"
+              type="email"
             />
           </label>
 

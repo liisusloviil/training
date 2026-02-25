@@ -9,15 +9,17 @@ function withError(message: string) {
 }
 
 export async function signInWithPasswordAction(formData: FormData) {
-  const login = String(formData.get("login") ?? "").trim();
+  const identifier = String(
+    formData.get("identifier") ?? formData.get("login") ?? "",
+  ).trim();
   const password = String(formData.get("password") ?? "");
   const nextPath = String(formData.get("next") ?? "/");
 
-  if (!login || !password) {
-    redirect(withError("Введите логин и пароль."));
+  if (!identifier || !password) {
+    redirect(withError("Введите email или логин и пароль."));
   }
 
-  if (!login.includes("@") && !isValidLogin(login)) {
+  if (!identifier.includes("@") && !isValidLogin(identifier)) {
     redirect(
       withError(
         "Логин должен содержать 3-32 символа: латинские буквы, цифры, точка, дефис или underscore.",
@@ -25,7 +27,7 @@ export async function signInWithPasswordAction(formData: FormData) {
     );
   }
 
-  const email = resolveAuthEmail(login);
+  const email = resolveAuthEmail(identifier);
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email,
