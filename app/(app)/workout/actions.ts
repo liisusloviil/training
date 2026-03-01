@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/session-queries";
 import { logCriticalError } from "@/lib/observability/server-logger";
 import { createClient } from "@/lib/supabase/server";
+import { getSetsPayloadLimitError } from "@/lib/workout/sets-payload-limits";
 import type {
   CompleteSessionActionState,
   CreateSessionActionState,
@@ -170,6 +171,11 @@ export async function upsertSessionSetsAction(
 
   if (!setsPayload) {
     return actionError("Не переданы данные сетов для сохранения.");
+  }
+
+  const payloadLimitError = getSetsPayloadLimitError(setsPayload);
+  if (payloadLimitError) {
+    return actionError(payloadLimitError);
   }
 
   const session = await getSessionStatusForUser(sessionId);

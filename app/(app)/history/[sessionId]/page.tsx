@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SessionDetails } from "@/components/history/session-details";
 import { getHistorySessionDetailsQuery } from "@/lib/db/history-queries";
+import { logCriticalError } from "@/lib/observability/server-logger";
 import type { HistorySessionDetails } from "@/types/history";
 
 type HistoryDetailsPageProps = {
@@ -15,8 +16,11 @@ export default async function HistoryDetailsPage({ params }: HistoryDetailsPageP
 
   try {
     details = await getHistorySessionDetailsQuery(sessionId);
-  } catch {
+  } catch (error) {
     hasError = true;
+    logCriticalError("history_session_page_read", error, {
+      sessionId,
+    });
   }
 
   if (hasError) {

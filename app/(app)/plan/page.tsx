@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PlanEmptyState } from "@/components/plan/plan-empty-state";
 import { PlanWeek } from "@/components/plan/plan-week";
 import { getCurrentPlanQuery } from "@/lib/db/plan-queries";
+import { logCriticalError } from "@/lib/observability/server-logger";
 import type { ActiveTrainingPlanReadModel } from "@/types/plan";
 
 export default async function PlanPage() {
@@ -10,8 +11,9 @@ export default async function PlanPage() {
 
   try {
     plan = await getCurrentPlanQuery();
-  } catch {
+  } catch (error) {
     hasReadError = true;
+    logCriticalError("plan_page_read", error);
   }
 
   if (hasReadError) {

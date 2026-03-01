@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SessionCreateForm } from "@/components/workout/session-create-form";
 import { getWorkoutNewContextQuery } from "@/lib/db/session-queries";
+import { logCriticalError } from "@/lib/observability/server-logger";
 import type { WorkoutNewContext } from "@/types/session";
 
 function getTodayDateString() {
@@ -13,8 +14,9 @@ export default async function WorkoutNewPage() {
 
   try {
     context = await getWorkoutNewContextQuery();
-  } catch {
+  } catch (error) {
     hasReadError = true;
+    logCriticalError("workout_new_page_read", error);
   }
 
   if (hasReadError) {

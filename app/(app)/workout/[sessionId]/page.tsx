@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SessionHeader } from "@/components/workout/session-header";
 import { SessionSetsForm } from "@/components/workout/session-sets-form";
+import { logCriticalError } from "@/lib/observability/server-logger";
 import { getSessionDetailsQuery } from "@/lib/db/session-queries";
 import type { WorkoutSessionReadModel } from "@/types/session";
 
@@ -16,8 +17,11 @@ export default async function WorkoutSessionPage({ params }: WorkoutSessionPageP
 
   try {
     session = await getSessionDetailsQuery(sessionId);
-  } catch {
+  } catch (error) {
     hasReadError = true;
+    logCriticalError("workout_session_page_read", error, {
+      sessionId,
+    });
   }
 
   if (hasReadError) {

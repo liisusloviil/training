@@ -1,6 +1,7 @@
 import { HistoryFilters } from "@/components/history/history-filters";
 import { HistoryList } from "@/components/history/history-list";
 import { getHistoryQuery } from "@/lib/db/history-queries";
+import { logCriticalError } from "@/lib/observability/server-logger";
 import type { HistoryQueryResult, HistoryStatusFilter } from "@/types/history";
 
 type HistoryPageProps = {
@@ -63,8 +64,15 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
       to,
       status,
     });
-  } catch {
+  } catch (error) {
     hasError = true;
+    logCriticalError("history_page_read", error, {
+      page,
+      pageSize: 12,
+      from,
+      to,
+      status,
+    });
   }
 
   if (hasError || !result) {

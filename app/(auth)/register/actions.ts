@@ -3,10 +3,23 @@
 import { headers } from "next/headers";
 import { isValidEmail, normalizeEmail } from "@/lib/auth-email";
 import { isValidUsername, normalizeUsername } from "@/lib/auth-username";
+import {
+  clearAuthFailures,
+  isAuthAttemptBlocked,
+  registerAuthFailure,
+} from "@/lib/security/auth-anti-abuse";
 import { createClient } from "@/lib/supabase/server";
 import type { RegisterActionState } from "@/types/auth-register";
 
 const MIN_PASSWORD_LENGTH = 8;
+
+async function readRequestHeaders() {
+  try {
+    return await headers();
+  } catch {
+    return new Headers();
+  }
+}
 
 async function getAppOrigin(): Promise<string> {
   const envOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -44,6 +57,20 @@ export async function signUpWithPasswordAction(
     };
   }
 
+  const antiAbuseContext = {
+    scope: "register" as const,
+    requestHeaders: await readRequestHeaders(),
+    login: email,
+  };
+
+  if (isAuthAttemptBlocked(antiAbuseContext)) {
+    return {
+      status: "error",
+      message:
+        "Не удалось завершить регистрацию. Проверьте данные и попробуйте снова.",
+    };
+  }
+
   if (!isValidUsername(username)) {
     return {
       status: "error",
@@ -74,6 +101,7 @@ export async function signUpWithPasswordAction(
       });
 
     if (usernameCheckError) {
+      registerAuthFailure(antiAbuseContext);
       return {
         status: "error",
         message: "Не удалось проверить username. Попробуйте снова позже.",
@@ -103,6 +131,7 @@ export async function signUpWithPasswordAction(
     });
 
     if (error) {
+      registerAuthFailure(antiAbuseContext);
       return {
         status: "error",
         message:
@@ -110,12 +139,15 @@ export async function signUpWithPasswordAction(
       };
     }
 
+    clearAuthFailures(antiAbuseContext);
+
     return {
       status: "success",
       message:
         "Аккаунт создан. Проверьте почту и подтвердите email, затем войдите в приложение.",
     };
   } catch {
+    registerAuthFailure(antiAbuseContext);
     return {
       status: "error",
       message: "Ошибка регистрации. Попробуйте снова позже.",

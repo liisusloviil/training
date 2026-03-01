@@ -5,6 +5,10 @@ import {
   completeSessionAction,
   upsertSessionSetsAction,
 } from "@/app/(app)/workout/actions";
+import {
+  getSetsPayloadLimitError,
+  SETS_PAYLOAD_LIMIT_MESSAGE,
+} from "@/lib/workout/sets-payload-limits";
 import type {
   CompleteSessionActionState,
   SessionExerciseReadModel,
@@ -211,6 +215,7 @@ export function SessionSetsForm({
       ),
     );
   }, [drafts, isReadOnly]);
+  const payloadLimitError = useMemo(() => getSetsPayloadLimitError(payload), [payload]);
 
   const updateWeight = (
     exerciseId: string,
@@ -264,6 +269,9 @@ export function SessionSetsForm({
 
       {saveState.status === "error" && saveState.message ? (
         <div className="error-message">{saveState.message}</div>
+      ) : null}
+      {payloadLimitError ? (
+        <div className="error-message">{SETS_PAYLOAD_LIMIT_MESSAGE}</div>
       ) : null}
       {saveState.status === "success" && saveState.message ? (
         <div className="success-message">{saveState.message}</div>
@@ -339,7 +347,11 @@ export function SessionSetsForm({
         </div>
 
         {!isReadOnly ? (
-          <button className="primary-link-button" type="submit">
+          <button
+            className="primary-link-button"
+            disabled={Boolean(payloadLimitError)}
+            type="submit"
+          >
             {isSaving ? "Сохранение..." : "Сохранить сеты"}
           </button>
         ) : null}
